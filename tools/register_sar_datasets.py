@@ -65,33 +65,84 @@ def load_sarship_instances(dirname: str, split: str, class_names: Union[List[str
 def register_sar_ship(name, dirname, split, class_names=CLASS_NAMES):
     DatasetCatalog.register(name, lambda: load_sarship_instances(dirname, split, class_names))
     MetadataCatalog.get(name).set(
-        thing_classes=list(class_names), dirname=dirname, split=split
+        thing_classes=list(class_names), dirname=dirname, split=split, evaluator_type="coco"
     )
 
-if __name__ == "__main__":
-    import cv2, random
-    from detectron2.utils.visualizer import Visualizer
-    import matplotlib.pyplot as plt
-
+def show_images():
     random.seed(1)
     dataset_dicts = load_sarship_instances("datasets/sar/", "train", "ship")
     register_sar_ship("sarship", "datasets/sar/", "train")
     sar_metadata = MetadataCatalog.get("sarship")
     for d in random.sample(dataset_dicts, 5):
         img = cv2.imread(d["file_name"], -1)
+        # img = imageio.imread(d["file_name"])
+
         pixel_max = img.max()
         pixel_min = img.min()
-        # img = img / (pixel_max - pixel_min) * 255
+        # img = img * 1.0 / (pixel_max - pixel_min) * 255
 
         k = pixel_max ** (1 / 255)
         img = np.clip(img, 1, None)
         img = np.log(img) / np.log(k)
 
-        img = img[:, :, np.newaxis]
-        img = np.concatenate((img, img, img), axis=2)
+        # img = img[:, :, np.newaxis]
+        # img = np.concatenate((img, img, img), axis=2)
 
         visualizer = Visualizer(img, metadata=sar_metadata, scale=1)
         out = visualizer.draw_dataset_dict(d)
         # cv2.imshow('imshow', out.get_image()[:, :, ::-1])
-        plt.imshow(out.get_image()[:, :, ::-1])
+        plt.imshow(out.get_image())
         plt.show()
+    return
+
+class Batch_loader:
+    def __init__(self, datalist):
+        self.datalist = datalist
+
+    def __getitem__(self, index):
+        d = self.datalist[index]
+        image = imageio.imread(d["file_name"])
+        pixel_max = image.max()            
+        k = pixel_max ** (1 / 255)
+        image = np.clip(image, 1, None)
+        image = np.log(image) / np.log(k)
+        image = image[np.newaxis, :, :]
+        image = np.concatenate((image, image, image), axis=0)
+        return image
+    
+    def __len__(self):
+        return len(self.datalist)
+
+def get_mean_std():
+    """Get mean and std by sample ratio
+    """
+    ratio=1
+    dataset_dicts = load_sarship_instances("datasets/sar/", "train_test", "ship")
+    dataset = Batch_loader(dataset_dicts)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=int(len(dataset)*ratio), 
+                                             shuffle=False, num_workers=0)
+    train = iter(dataloader).next()   # 一个batch的数据
+    mean = np.mean(train.numpy(), axis=(0,2,3))
+    std = np.std(train.numpy(), axis=(0,2,3))
+    print(mean, std)
+    return 
+
+
+if __name__ == "__main__":
+    import cv2, random
+    from detectron2.utils.visualizer import Visualizer
+    import matplotlib.pyplot as plt
+    import imageio
+    import torch 
+
+    # show_images()
+    # get_mean_std()
+
+    # BGR order
+    mean = [78.11523, 78.11523, 78.11523]
+    std = np.array([57.375, 57.120, 58.395])
+    sar_std = np.array([30.47155, 30.47155, 30.47155])
+    cofficient = sar_std / std # [0.53109455 0.53346551 0.52181779]
+    print(cofficient)
+
+    

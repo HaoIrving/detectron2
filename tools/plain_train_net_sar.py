@@ -61,6 +61,8 @@ logger = logging.getLogger("detectron2")
 from register_sar_datasets import register_sar_ship
 register_sar_ship("sar_ship_train", "datasets/sar/", "train")
 register_sar_ship("sar_ship_test", "datasets/sar/", "test")
+# import the corresponding dataseet mapper
+from map_sar_data import DatasetMapper_sar_ship
 
 def get_evaluator(cfg, dataset_name, output_folder=None):
     """
@@ -154,7 +156,7 @@ def do_train(cfg, model, resume=False):
 
     # compared to "train_net.py", we do not support accurate timing and
     # precise BN here, because they are not trivial to implement in a small training loop
-    data_loader = build_detection_train_loader(cfg)
+    data_loader = build_detection_train_loader(cfg, mapper=DatasetMapper_sar_ship(cfg, True))
     logger.info("Starting training from iteration {}".format(start_iter))
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
