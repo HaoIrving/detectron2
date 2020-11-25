@@ -102,13 +102,20 @@ class Batch_loader:
     def __getitem__(self, index):
         d = self.datalist[index]
         image = imageio.imread(d["file_name"])
-        pixel_max = image.max()            
-        k = pixel_max ** (1 / 255)
-        image = np.clip(image, 1, None)
-        image = np.log(image) / np.log(k)
+        pixel_max = image.max() 
+        pixel_min = image.min()
+ 
+        # [1.45497722, 1.45497722, 1.45497722] [3.7081214, 3.7081214, 3.7081214] [0.06462957 0.06491809 0.06350067]
+        image = image * 1.0 / (pixel_max - pixel_min) * 255  
+
+        # [78.11523, 78.11523, 78.11523] [57.375, 57.120, 58.395] [0.53109455 0.53346551 0.52181779]
+        # k = pixel_max ** (1 / 255)
+        # image = np.clip(image, 1, None)
+        # image = np.log(image) / np.log(k)
+        
         image = image[np.newaxis, :, :]
-        image = np.concatenate((image, image, image), axis=0)
-        return image
+        # image = np.concatenate((image, image, image), axis=0)
+        return torch.from_numpy(image)
     
     def __len__(self):
         return len(self.datalist)
@@ -139,10 +146,10 @@ if __name__ == "__main__":
     # get_mean_std()
 
     # BGR order
-    mean = [78.11523, 78.11523, 78.11523]
+    # mean = [78.11523, 78.11523, 78.11523]
     std = np.array([57.375, 57.120, 58.395])
-    sar_std = np.array([30.47155, 30.47155, 30.47155])
-    cofficient = sar_std / std # [0.53109455 0.53346551 0.52181779]
+    sar_std = np.array([3.7081214, 3.7081214, 3.7081214])
+    cofficient = sar_std / std # [0.53109455 0.53346551 0.52181779] [0.06462957 0.06491809 0.06350067]
     print(cofficient)
 
     
