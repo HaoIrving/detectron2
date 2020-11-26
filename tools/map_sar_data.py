@@ -121,11 +121,11 @@ class DatasetMapper_sar_ship:
             image = imageio.imread(dataset_dict["file_name"])
             pixel_max = image.max()     
             pixel_min = image.min()
-            image = image * 1.0 / (pixel_max - pixel_min) * 255
-            # k = pixel_max ** (1 / 255)
-            # image = np.clip(image, 1, None)
-            # image = np.log(image) / np.log(k)
-            
+            # image = image / (pixel_max - pixel_min) * 255
+            k = pixel_max ** (1 / 255)
+            image = np.clip(image, 1, None)
+            image = np.log(image) / np.log(k)
+            # image = (image).astype(np.float32)
             image = image[:, :, np.newaxis]
             image = np.concatenate((image, image, image), axis=2)
         else:
