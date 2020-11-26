@@ -23,11 +23,11 @@ def load_sarship_instances(dirname: str, split: str, class_names: Union[List[str
         fileids = np.loadtxt(f, dtype=np.str)
 
     # Needs to read many small annotation files. Makes sense at local
-    annotation_dirname = PathManager.get_local_path(os.path.join(dirname, "AIR-SARShip-2.0-xml/"))
+    annotation_dirname = PathManager.get_local_path(os.path.join(dirname, "AIR-SARShip-1.0-xml/"))
     dicts = []
     for fileid in fileids:
         anno_file = os.path.join(annotation_dirname, fileid + ".xml")
-        tiff_file = os.path.join(dirname, "AIR-SARShip-2.0-data", fileid + ".tiff")
+        tiff_file = os.path.join(dirname, "AIR-SARShip-1.0-data", fileid + ".tiff")
 
         with PathManager.open(anno_file) as f:
             tree = ET.parse(f)
@@ -35,20 +35,20 @@ def load_sarship_instances(dirname: str, split: str, class_names: Union[List[str
         r = {
             "file_name": tiff_file,
             "image_id": fileid,
-            "height": int(1000),
-            "width": int(1000),
+            "height": int(tree.findall("./size/height")[0].text),
+            "width": int(tree.findall("./size/width")[0].text),
         }
         instances = []
 
-        for obj in tree.findall("objects/object"):
-            cls = obj.find("possibleresult/name").text
+        for obj in tree.findall("object"):
+            cls = obj.find("name").text
             # We include "difficult" samples in training.
             # Based on limited experiments, they don't hurt accuracy.
             # difficult = int(obj.find("difficult").text)
             # if difficult == 1:
             # continue
-            bbox = obj.findall("points/point")
-            bbox = [float(x_or_y) for point in [bbox[0], bbox[2]] for x_or_y in point.text.split(", ")]
+            bbox = obj.find("bndbox")
+            bbox = [float(bbox.find(x).text) for x in ["xmin", "ymin", "xmax", "ymax"]]
             # Original annotations are integers in the range [1, W or H]
             # Assuming they mean 1-based pixel indices (inclusive),
             # a box with annotation (xmin=1, xmax=W) covers the whole image.
@@ -69,16 +69,19 @@ def register_sar_ship(name, dirname, split, class_names=CLASS_NAMES):
     )
 
 def show_images():
-    random.seed(1)
+    random.seed(3)
     dataset_dicts = load_sarship_instances("datasets/sar/", "train", "ship")
     register_sar_ship("sarship", "datasets/sar/", "train")
     sar_metadata = MetadataCatalog.get("sarship")
     for d in random.sample(dataset_dicts, 5):
-        img = cv2.imread(d["file_name"], -1)
-        # img = imageio.imread(d["file_name"])
+        # img = cv2.imread(d["file_name"], -1)
+        # tif = TIFF.open(d["file_name"], mode='r')
+        # img = tif.read_image()
+        img = imageio.imread(d["file_name"])
 
         pixel_max = img.max()
         pixel_min = img.min()
+        
         # img = img * 1.0 / (pixel_max - pixel_min) * 255
 
         k = pixel_max ** (1 / 255)
@@ -106,16 +109,16 @@ class Batch_loader:
         pixel_min = image.min()
  
         # [1.45497722, 1.45497722, 1.45497722] [3.7081214, 3.7081214, 3.7081214] [0.06462957 0.06491809 0.06350067]
-        image = image * 1.0 / (pixel_max - pixel_min) * 255  
+        # image = image * 1.0 / (pixel_max - pixel_min) * 255  
 
         # [78.11523, 78.11523, 78.11523] [57.375, 57.120, 58.395] [0.53109455 0.53346551 0.52181779]
-        # k = pixel_max ** (1 / 255)
-        # image = np.clip(image, 1, None)
-        # image = np.log(image) / np.log(k)
+        k = pixel_max ** (1 / 255)
+        image = np.clip(image, 1, None)
+        image = np.log(image) / np.log(k)
         
         image = image[np.newaxis, :, :]
         # image = np.concatenate((image, image, image), axis=0)
-        return torch.from_numpy(image)
+        return torch.from_numpy(image).float()
     
     def __len__(self):
         return len(self.datalist)
@@ -132,6 +135,9 @@ def get_mean_std():
     mean = np.mean(train.numpy(), axis=(0,2,3))
     std = np.std(train.numpy(), axis=(0,2,3))
     print(mean, std)
+    imagenet_std = np.array([57.375, 57.120, 58.395])
+    cofficient = std / imagenet_std 
+    print(cofficient)
     return 
 
 
@@ -141,15 +147,16 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import imageio
     import torch 
+    from libtiff import TIFF
 
     # show_images()
-    # get_mean_std()
+    get_mean_std()
 
     # BGR order
     # mean = [78.11523, 78.11523, 78.11523]
-    std = np.array([57.375, 57.120, 58.395])
-    sar_std = np.array([3.7081214, 3.7081214, 3.7081214])
-    cofficient = sar_std / std # [0.53109455 0.53346551 0.52181779] [0.06462957 0.06491809 0.06350067]
-    print(cofficient)
+    # std = np.array([57.375, 57.120, 58.395])
+    # sar_std = np.array([3.7081214, 3.7081214, 3.7081214])
+    # cofficient = sar_std / std # [0.53109455 0.53346551 0.52181779] [0.06462957 0.06491809 0.06350067]
+    # print(cofficient)
 
     
