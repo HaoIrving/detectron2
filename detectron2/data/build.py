@@ -165,7 +165,14 @@ def print_instances_class_histogram(dataset_dicts, class_names):
     histogram = np.zeros((num_classes,), dtype=np.int)
     for entry in dataset_dicts:
         annos = entry["annotations"]
-        classes = [x["category_id"] for x in annos if not x.get("iscrowd", 0)]
+        classes = np.asarray(
+            [x["category_id"] for x in annos if not x.get("iscrowd", 0)], dtype=np.int
+        )
+        if len(classes):
+            assert classes.min() >= 0, f"Got an invalid category_id={classes.min()}"
+            assert (
+                classes.max() < num_classes
+            ), f"Got an invalid category_id={classes.max()} for a dataset of {num_classes} classes"
         histogram += np.histogram(classes, bins=hist_bins)[0]
 
     N_COLS = min(6, len(class_names) * 2)
@@ -298,7 +305,7 @@ def build_batch_data_loader(
         )
 
 
-def _train_loader_from_config(cfg, *, mapper=None, dataset=None, sampler=None):
+def _train_loader_from_config(cfg, mapper=None, *, dataset=None, sampler=None):
     if dataset is None:
         dataset = get_detection_dataset_dicts(
             cfg.DATASETS.TRAIN,

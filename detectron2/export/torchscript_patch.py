@@ -316,6 +316,8 @@ def patch_nonscriptable_classes():
     # we change backbone to use ModuleList for scripting.
     # (note: this changes param names in state_dict)
 
+    # TODO: __prepare_scriptable__ was reverted from pytorch: D25061862
+    # We hack it here until it's added back
     def prepare_resnet(self):
         ret = deepcopy(self)
         ret.stages = nn.ModuleList(ret.stages)
@@ -323,7 +325,7 @@ def patch_nonscriptable_classes():
             delattr(ret, k)
         return ret
 
-    ResNet.__prepare_scriptable__ = prepare_resnet
+    ResNet.__tmp_prepare_scriptable__ = prepare_resnet
 
     def prepare_fpn(self):
         ret = deepcopy(self)
@@ -334,4 +336,34 @@ def patch_nonscriptable_classes():
                 delattr(ret, name)
         return ret
 
-    FPN.__prepare_scriptable__ = prepare_fpn
+    FPN.__tmp_prepare_scriptable__ = prepare_fpn
+
+    # Annotate some attributes to be constants for the purpose of scripting,
+    # even though they are not constants in eager mode.
+    from detectron2.modeling.roi_heads import StandardROIHeads
+
+    if hasattr(StandardROIHeads, "__annotations__"):
+        StandardROIHeads.__annotations__["mask_on"] = torch.jit.Final[bool]
+        StandardROIHeads.__annotations__["keypoint_on"] = torch.jit.Final[bool]
+
+
+# These patches are not supposed to have side-effects.
+patch_nonscriptable_classes()
+
+
+@contextmanager
+def freeze_training_mode(model):
+    """
+    A context manager that annotates the "training" attribute of every submodule
+    to constant, so that the training codepath in these modules can be
+    meta-compiled away. Upon exiting, the annotations are reverted.
+    """
+    classes = {type(x) for x in model.modules()}
+    # __constants__ is the old way to annotate constants and not compatible
+    # with __annotations__ .
+    classes = {x for x in classes if not hasattr(x, "__constants__")}
+    for cls in classes:
+        cls.__annotations__["training"] = torch.jit.Final[bool]
+    yield
+    for cls in classes:
+        cls.__annotations__["training"] = bool
